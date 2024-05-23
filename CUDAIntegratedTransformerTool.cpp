@@ -97,41 +97,33 @@ public:
         : Context(Context), R(R) {}
         
         
-    bool ModifyKernelElseBlock(CallExpr *CE)
-{
-    if(ConvertIfElseToIfBody){
-    if (isCUDAKernelCall(CE))
-    {
-        SourceLocation StartLoc = CE->getCallee()->getBeginLoc();
-        SourceLocation EndLoc = CE->getRParenLoc().getLocWithOffset(1);
+    
+    bool VisitFunctionDecl(FunctionDecl *FD) {
+        if (FD->hasAttr<CUDAGlobalAttr>()) {  // Check if it's a CUDA kernel
+            CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
+            if (Body && !Body->body_empty()) {
+                for (auto *item : Body->body()) {
+                    if (isa<IfStmt>(item)) {  // Find the 'if' statement
+                        auto *IfStatement = cast<IfStmt>(item);
+                        SourceLocation IfStart = IfStatement->getIfLoc();
 
-        if (!StartLoc.isInvalid() && !EndLoc.isInvalid())
-        {
-            StringRef CallText = Lexer::getSourceText(CharSourceRange::getCharRange(StartLoc, EndLoc),
-                                                      Context->getSourceManager(), Context->getLangOpts());
+                        // Copy the body of the 'if' excluding the braces
+                        StringRef IfBodyText = Lexer::getSourceText(
+                            CharSourceRange::getTokenRange(IfStatement->getThen()->getSourceRange()),
+                            Context->getSourceManager(), Context->getLangOpts(), 0);
 
-            size_t ifPos = CallText.find("if");
-            size_t elsePos = CallText.find("else");
+                        // Clear the entire function body and insert only the 'if' body
+                        SourceLocation EndLoc = Lexer::getLocForEndOfToken(Body->body_back()->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+                        SourceRange FullFuncRange(IfStart, EndLoc);
+                        R.ReplaceText(FullFuncRange, IfBodyText);
 
-            if (ifPos != StringRef::npos && elsePos != StringRef::npos)
-            {
-           
-                size_t lastClosingBracePos = CallText.rfind('}', elsePos);
-
-                std::string modifiedCallText = CallText.substr(0, lastClosingBracePos).str() + CallText.substr(elsePos).str();
-
-
-                SourceRange ReplacementRange(StartLoc, EndLoc);
-                R.ReplaceText(ReplacementRange, modifiedCallText);
-
-                return true;
+                        break; // Only handle the first 'if'
+                    }
+                }
             }
         }
-        }
+        return true;
     }
-    return false;
-}
-    
 
     // Visit type declarations and replace double with float.
     bool VisitTypeLoc(TypeLoc TL)
@@ -372,7 +364,6 @@ public:
     	_synchThreadto_syncwarp(CE);
     	replaceAtomicAddFunction(CE);
     	replaceAtomicAddWithDirectOperation(CE);
-    	ModifyKernelElseBlock(CE);
     	
     	
         if (ChangeKernelCallParameter && isCUDAKernelCall(CE))
