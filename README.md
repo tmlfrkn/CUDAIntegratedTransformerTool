@@ -60,13 +60,13 @@ When using the tool, you can utilize the following command line options:
 - `--simplify-if-statements`: Simplifies function bodies by keeping only the first if statement body. Example usage: `--simplify-if-statements`.
 
 
-Example command line executions:
+## Example command line executions:
 
 ```bash
 CUDAIntegratedTransformerTool --convert-if-else-to-if-body=true  /home/furkan/Desktop/PolyBench/PolyBench-ACC-master/CUDA/datamining/correlation/correlation.cu -- -I/home/furkan/Desktop/PolyBench/PolyBench-ACC-master/common --cuda-gpu-arch=sm_86
 ```
 
-##converter.sh
+## converter.sh
 
 This script automates the processing of CUDA source files using the CUDA Integrated Transformer Tool (`CUDAIntegratedTransformerTool`). It applies various transformations to the source files with different combinations of flags and saves the output in the specified output directory.
 ## Prerequisites
@@ -82,7 +82,7 @@ This script automates the processing of CUDA source files using the CUDA Integra
 `OUTPUT_DIR`: Directory to save the processed CUDA files.
 `INCLUDE_DIR`: Directory containing additional header files needed for compilation.
 
-#Example Usage
+## Example Usage
 
 ```bash
 ./converter.sh /home/furkan/Desktop/PolyBench/PolyBench-ACC-master/CUDA/datamining/covariance /home/furkan/Desktop/Output /home/furkan/Desktop/PolyBench/PolyBench-ACC-master/common
