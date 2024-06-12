@@ -88,42 +88,119 @@ cl::opt<bool> replaceAtomicAddFunctiontoDirect("atomic-to-direct",
 cl::opt<bool> ConvertIfElseToIfBody("convert-if-else-to-if-body",
                                     cl::desc("Convert if-else statements to only if-body."),
                                     cl::init(false));
-
+cl::opt<bool> SimplifyIfStatements("simplify-if-statements",
+                                   cl::desc("Simplify function bodies by keeping only the first if statement body."),
+                                   cl::init(false));
+cl::opt<bool> SimplifyElseStatements("simplify-else-statements",
+                                     cl::desc("Simplify function bodies by keeping only the else statement body."),
+                                     cl::init(false));
+cl::opt<bool> SimplifyElseIfStatements("simplify-else-if-statements",
+                                       cl::desc("Simplify function bodies by keeping only the else if statement body."),
+                                       cl::init(false));
 
 class MyASTVisitor : public RecursiveASTVisitor<MyASTVisitor>
 {
 public:
     explicit MyASTVisitor(ASTContext *Context, Rewriter &R)
         : Context(Context), R(R) {}
+
+	bool VisitFunctionDecl(FunctionDecl *FD) {
+	    if (SimplifyIfStatements) { 
+		if (FD->hasAttr<CUDAGlobalAttr>()) {  // Check if it's a CUDA kernel
+		    CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
+		    if (Body && !Body->body_empty()) {
+		        for (auto *item : Body->body()) {
+		            if (isa<IfStmt>(item)) {  // Find the 'if' statement
+		                auto *IfStatement = cast<IfStmt>(item);
+		                SourceLocation IfStart = IfStatement->getIfLoc();
+
+		                // Copy the body of the 'if' excluding the braces
+		                StringRef IfBodyText = Lexer::getSourceText(
+		                    CharSourceRange::getTokenRange(IfStatement->getThen()->getSourceRange()),
+		                    Context->getSourceManager(), Context->getLangOpts(), 0);
+
+		                // Clear the entire function body and insert only the 'if' body
+		                SourceLocation EndLoc = Lexer::getLocForEndOfToken(Body->body_back()->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+		                SourceRange FullFuncRange(IfStart, EndLoc);
+		                R.ReplaceText(FullFuncRange, IfBodyText);
+
+		                break; // Only handle the first 'if'
+		            }
+		        }
+		    }
+		}
+	    }
+
+	    if (SimplifyElseStatements) { 
+		if (FD->hasAttr<CUDAGlobalAttr>()) {  // Check if it's a CUDA kernel
+		    CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
+		    if (Body && !Body->body_empty()) {
+		        for (auto *item : Body->body()) {
+		            if (isa<IfStmt>(item)) {  // Find the 'if' statement
+		                auto *IfStatement = cast<IfStmt>(item);
+		                SourceLocation IfStart = IfStatement->getIfLoc();
+
+		                if (IfStatement->getElse()) { // Check if there's an 'else' statement
+		                    Stmt *ElseStatement = IfStatement->getElse();
+		                    
+		                    // Copy the body of the 'else' excluding the braces
+		                    StringRef ElseBodyText = Lexer::getSourceText(
+		                        CharSourceRange::getTokenRange(ElseStatement->getSourceRange()),
+		                        Context->getSourceManager(), Context->getLangOpts(), 0);
+
+		                    // Clear the entire function body and insert only the 'else' body
+		                    SourceLocation EndLoc = Lexer::getLocForEndOfToken(Body->body_back()->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+		                    SourceRange FullFuncRange(IfStart, EndLoc);
+		                    R.ReplaceText(FullFuncRange, ElseBodyText);
+
+		                    break; // Only handle the first 'if'
+		                }
+		            }
+		        }
+		    }
+		}
+	    }
+
+	    if (SimplifyElseIfStatements) {
+		if (FD->hasAttr<CUDAGlobalAttr>()) {  // Check if it's a CUDA kernel
+		    CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
+		    if (Body && !Body->body_empty()) {
+		        for (auto *item : Body->body()) {
+		            if (isa<IfStmt>(item)) {  // Find the 'if' statement
+		                auto *IfStatement = cast<IfStmt>(item);
+
+		                // Traverse the 'if' chain to find 'else if'
+		                while (IfStatement) {
+		                    if (auto *ElseIfStatement = dyn_cast<IfStmt>(IfStatement->getElse())) {
+		                        IfStatement = ElseIfStatement;
+		                        SourceLocation ElseIfStart = ElseIfStatement->getIfLoc();
+
+		                        // Copy the body of the 'else if' excluding the braces
+		                        StringRef ElseIfBodyText = Lexer::getSourceText(
+		                            CharSourceRange::getTokenRange(ElseIfStatement->getThen()->getSourceRange()),
+		                            Context->getSourceManager(), Context->getLangOpts(), 0);
+
+		                        // Clear the entire function body and insert only the 'else if' body
+		                        SourceLocation EndLoc = Lexer::getLocForEndOfToken(Body->body_back()->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
+		                        SourceRange FullFuncRange(ElseIfStart, EndLoc);
+		                        R.ReplaceText(FullFuncRange, ElseIfBodyText);
+
+		                        break; // Only handle the first 'else if'
+		                    } else {
+		                        break;
+		                    }
+		                }
+		            }
+		        }
+		    }
+		}
+	    }
+
+	    return true;
+	}
+ 
+      
         
-        
-    
-    bool VisitFunctionDecl(FunctionDecl *FD) {
-        if (FD->hasAttr<CUDAGlobalAttr>()) {  // Check if it's a CUDA kernel
-            CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
-            if (Body && !Body->body_empty()) {
-                for (auto *item : Body->body()) {
-                    if (isa<IfStmt>(item)) {  // Find the 'if' statement
-                        auto *IfStatement = cast<IfStmt>(item);
-                        SourceLocation IfStart = IfStatement->getIfLoc();
-
-                        // Copy the body of the 'if' excluding the braces
-                        StringRef IfBodyText = Lexer::getSourceText(
-                            CharSourceRange::getTokenRange(IfStatement->getThen()->getSourceRange()),
-                            Context->getSourceManager(), Context->getLangOpts(), 0);
-
-                        // Clear the entire function body and insert only the 'if' body
-                        SourceLocation EndLoc = Lexer::getLocForEndOfToken(Body->body_back()->getEndLoc(), 0, Context->getSourceManager(), Context->getLangOpts());
-                        SourceRange FullFuncRange(IfStart, EndLoc);
-                        R.ReplaceText(FullFuncRange, IfBodyText);
-
-                        break; // Only handle the first 'if'
-                    }
-                }
-            }
-        }
-        return true;
-    }
 
     // Visit type declarations and replace double with float.
     bool VisitTypeLoc(TypeLoc TL)
