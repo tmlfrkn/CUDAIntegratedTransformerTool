@@ -1,14 +1,15 @@
 #!/bin/bash
 
 # Check if the correct number of arguments is provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 INPUT_DIR OUTPUT_DIR"
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 INPUT_DIR OUTPUT_DIR INCLUDE_DIR"
     exit 1
 fi
 
-# Define the input and output directories from the command-line arguments
+# Define the input, output, and include directories from the command-line arguments
 INPUT_DIR=$1
 OUTPUT_DIR=$2
+INCLUDE_DIR=$3
 
 # Ensure the output directory exists
 mkdir -p "$OUTPUT_DIR"
@@ -17,7 +18,7 @@ mkdir -p "$OUTPUT_DIR"
 TOOL_COMMAND="CUDAIntegratedTransformerTool"
 
 # Define additional arguments for the tool
-TOOL_ARGS="--cuda-gpu-arch=sm_86"
+TOOL_ARGS="--cuda-gpu-arch=sm_86 -I$INCLUDE_DIR"
 
 # List of boolean flags, including the new flag
 FLAGS=("convert-double-to-float" "change-Kernel" "dim3" "change-specific"
@@ -63,7 +64,7 @@ for SOURCE_FILE in "$INPUT_DIR"/*.cu; do
         echo "Processing $SOURCE_FILE with flags: $combination"
 
         # Run the tool and save the output, with error handling
-        if $TOOL_COMMAND "$SOURCE_FILE" $combination -- $TOOL_ARGS > "$OUTPUT_FILE"; then
+        if $TOOL_COMMAND $combination "$SOURCE_FILE" -- $TOOL_ARGS > "$OUTPUT_FILE"; then
             echo "Successfully processed $SOURCE_FILE, output saved to $OUTPUT_FILE"
         else
             echo "Error occurred while processing $SOURCE_FILE with flags: $combination"
